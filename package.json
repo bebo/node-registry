@@ -1,0 +1,28 @@
+{
+  "name": "node-registry",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "mocha",
+    "install": "node-gyp rebuild",
+    "configure": "node-gyp configure",
+    "build": "node-gyp build"
+  },
+  "devDependencies": {
+    "bindings": "^1.2.1",
+    "mocha": "^3.4.2",
+    "nan": "^2.6.2",
+    "napa": "^3.0.0",
+    "node-gyp": "^3.6.2"
+  },
+  "dependencies": {
+    "bluebird": "^3.5.0"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "author": "",
+  "license": "ISC",
+  "gypfile": true
+}
