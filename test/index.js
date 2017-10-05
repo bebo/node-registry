@@ -57,4 +57,18 @@ describe('registry', function () {
       throw err;
     });
   });
+
+  it('create key', function () {
+    return Registry.createValue({
+      hkey: "HKEY_CURRENT_USER",
+      subkey: "SOFTWARE\\Bebo\\GameCapture",
+      type: "REG_SZ",
+      value: "test",
+      key: "Testing122232",
+    }).then(function (data) {
+      throw 'should not succeed';
+    }).catch(function (err) {
+      return true;
+    });
+  });
 });

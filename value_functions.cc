@@ -184,10 +184,11 @@ class PutValueWorker : public WinAsyncWorker
 {
 protected:
   ValueEntity *entity;
+  bool createIfKeyNotExists;
 
 public:
-  PutValueWorker(ValueEntity *e, Callback *callback)
-      : entity(e), WinAsyncWorker(callback){};
+  PutValueWorker(ValueEntity *e, Callback *callback, bool _createIfKeyNotExists)
+      : entity(e), WinAsyncWorker(callback), createIfKeyNotExists(_createIfKeyNotExists){};
   ~PutValueWorker(){};
 
   void Execute()
@@ -200,6 +201,11 @@ public:
     }
 
     const wchar_t *key = entity->key.c_str();
+
+    if (!createIfKeyNotExists && !reg_key.HasValue(key)) {
+      SetErrorMessage("Unable to find key");
+      return;
+    }
 
     if (entity->type.compare(L"REG_DWORD") == 0) {
       reg_key.WriteValue(key, static_cast<DWORD>(entity->value32));
@@ -436,7 +442,81 @@ NAN_METHOD(putValue)
     entity->value = utf8_decode(*value);
   }
 
-  AsyncQueueWorker(new PutValueWorker(entity, callback));
+  AsyncQueueWorker(new PutValueWorker(entity, callback, true));
+}
+
+NAN_METHOD(createValue)
+{
+  Local<Object> object = info[0].As<Object>();
+  Callback *callback = new Callback(info[1].As<Function>());
+  ValueEntity *entity = new ValueEntity;
+
+  if (!Nan::Has(object, New("hkey").ToLocalChecked()).FromJust()) {
+    Local<Value> argv[] = {New("hkey is missing").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  if (!Nan::Has(object, New("subkey").ToLocalChecked()).FromJust()) {
+    Local<Value> argv[] = {New("subkey is missing").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  if (!Nan::Has(object, New("type").ToLocalChecked()).FromJust()) {
+    Local<Value> argv[] = {New("type is missing").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
+    Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  if (!Nan::Has(object, New("value").ToLocalChecked()).FromJust()) {
+    Local<Value> argv[] = {New("value is missing").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  v8::String::Utf8Value hkey(Get(object, New("hkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  try {
+  entity->hkey = hkey_from_string(*hkey);
+  } catch (const char*) {
+    Local<Value> argv[] = {New("invalid hkey. [HKLM, HKCU, HKCC, HKCR, HKU]").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+
+  v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  entity->subkey = utf8_decode(*subkey);
+
+  v8::String::Utf8Value utype(Get(object, New("type").ToLocalChecked()).ToLocalChecked()->ToString());
+  std::string type(*utype);
+  if (!validate_type(type)) {
+    Local<Value> argv[] = {New("invalid type. [REG_SZ, REG_DWORD, REG_QWORD]").ToLocalChecked(), Null()};
+    callback->Call(2, argv);
+    return;
+  }
+  entity->type = utf8_decode(type);
+
+  v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
+  entity->key = utf8_decode(*key);
+
+  if (type.compare("REG_DWORD") == 0) {
+    entity->value32 = Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToInt32()->Value();
+  } else if (type.compare("REG_QWORD") == 0) {
+    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    std::string::size_type sz = 0;
+    entity->value64 = std::stoll(*value, &sz, 0);
+  } else if (type.compare("REG_SZ") == 0) {
+    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    entity->value = utf8_decode(*value);
+  }
+
+  AsyncQueueWorker(new PutValueWorker(entity, callback, false));
 }
 
 NAN_METHOD(deleteValue)

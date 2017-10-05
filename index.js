@@ -13,6 +13,7 @@ var Registry = {
 
 Registry.getValue = promisify(Native.getValue);
 Registry.putValue = promisify(Native.putValue);
+Registry.createValue = promisify(Native.createValue);
 Registry.deleteValue = promisify(Native.deleteValue);
 
 module.exports = Registry;

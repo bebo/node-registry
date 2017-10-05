@@ -5,6 +5,7 @@
 
 NAN_METHOD(getValue);
 NAN_METHOD(putValue);
+NAN_METHOD(createValue);
 NAN_METHOD(deleteValue);
 
 class ValueEntity {
