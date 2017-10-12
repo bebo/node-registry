@@ -14,6 +14,7 @@
 #include <cinttypes>
 #include <iostream>
 #include <sstream>
+#include <windows.h>
 
 using Nan::AsyncQueueWorker;
 using Nan::AsyncWorker;
@@ -41,6 +42,7 @@ using Nan::To;
 #define REG_SZ_W    L"REG_SZ"
 #define REG_DWORD_W L"REG_DWORD"
 #define REG_QWORD_W L"REG_QWORD"
+#define MAX_RETRY   3
 
 std::wstring utf8_decode(const std::string& str) {
   if (str.empty())
@@ -100,7 +102,6 @@ bool validate_type(std::string &type) {
   return true;
 }
 
-
 class GetValueWorker : public WinAsyncWorker
 {
 protected:
@@ -126,19 +127,25 @@ public:
       return;
     }
 
-    if (entity->type.compare(L"REG_DWORD") == 0) {
-      reg_key.ReadValueDW(key, reinterpret_cast<DWORD*>(&entity->value32));
-    } else if (entity->type.compare(L"REG_QWORD") == 0) {
-      reg_key.ReadInt64(key, &entity->value64);
-    } else if (entity->type.compare(L"REG_SZ") == 0) {
-      reg_key.ReadValue(key, &entity->value);
-    } else if (entity->type.compare(L"REG_EXPAND_SZ") == 0) {
+    BYTE data[1024];
+    DWORD size = 1024;
+    DWORD type;
+    LONG result = reg_key.ReadValue(key, data, &size, &type);
+
+    if (type == REG_DWORD) {
+      entity->type = L"REG_DWORD";
+      entity->value32 = *reinterpret_cast<DWORD*>(data);
+    } else if (type == REG_QWORD) {
+      entity->type = L"REG_QWORD";
+      entity->value64 = *reinterpret_cast<int64_t*>(data);
+    } else if (type == REG_SZ) {
+      entity->type = L"REG_SZ";
+      entity->value = reinterpret_cast<wchar_t*>(data);
+    } else if (type == REG_EXPAND_SZ) {
       // UNSUPPORTED FOR NOW
-    } else if (entity->type.compare(L"REG_BINARY") == 0) {
+    } else if (type == REG_BINARY) {
       // UNSUPPORTED FOR NOW
     }
-
-
   }
 
   // Executed when the async work is complete
@@ -194,6 +201,7 @@ public:
   void Execute()
   {
     const wchar_t *subkey = entity->subkey.c_str();
+
     RegKey reg_key(entity->hkey, subkey, KEY_WRITE | KEY_READ);
     if (!reg_key.Valid()) {
       SetErrorMessage("Failed to open registry");
@@ -201,27 +209,68 @@ public:
     }
 
     const wchar_t *key = entity->key.c_str();
-
     if (!replaceIfKeyExists && reg_key.HasValue(key)) {
       SetErrorMessage("Key already exists");
       return;
     }
 
-    if (entity->type.compare(L"REG_DWORD") == 0) {
-      reg_key.WriteValue(key, static_cast<DWORD>(entity->value32));
-      reg_key.ReadValueDW(key, reinterpret_cast<DWORD*>(&entity->value32));
-    } else if (entity->type.compare(L"REG_QWORD") == 0) {
-      reg_key.WriteValue(key, entity->value64);
-      reg_key.ReadInt64(key, &entity->value64);
-    } else if (entity->type.compare(L"REG_SZ") == 0) {
-      reg_key.WriteValue(key, entity->value.c_str());
-      reg_key.ReadValue(key, &entity->value);
-    } else if (entity->type.compare(L"REG_EXPAND_SZ") == 0) {
-      // UNSUPPORTED FOR NOW
-    } else if (entity->type.compare(L"REG_BINARY") == 0) {
-      // UNSUPPORTED FOR NOW
+    LONG result = -1;
+    for (int i = 0; i < MAX_RETRY && result != ERROR_SUCCESS; i++) {
+      if (entity->type.compare(L"REG_DWORD") == 0) {
+        result = reg_key.WriteValue(key, static_cast<DWORD>(entity->value32));
+      } else if (entity->type.compare(L"REG_QWORD") == 0) {
+        result = reg_key.WriteValue(key, entity->value64);
+      } else if (entity->type.compare(L"REG_SZ") == 0) {
+        result = reg_key.WriteValue(key, entity->value.c_str());
+      }
+
+      if (result != ERROR_SUCCESS) {
+        Sleep((i + 1) * 10);
+        continue;
+      }
+
+      BYTE data[1024];
+      DWORD size = 1024;
+      DWORD type;
+      result = reg_key.ReadValue(key, data, &size, &type);
+
+      if (type == REG_DWORD) {
+        DWORD reg_data = *reinterpret_cast<DWORD*>(data);
+        result = (entity->value32 == reg_data) ? ERROR_SUCCESS : -1;
+        entity->type = L"REG_DWORD";
+        entity->value32 = reg_data;
+      } else if (type == REG_QWORD) {
+        int64_t reg_data = *reinterpret_cast<int64_t*>(data);
+        result = (entity->value64 == reg_data) ? ERROR_SUCCESS : -1;
+        entity->type = L"REG_QWORD";
+        entity->value64 = reg_data;
+      } else if (type == REG_SZ) {
+        wchar_t *reg_data = reinterpret_cast<wchar_t*>(data);
+        result = (entity->value.compare(reg_data) == 0) ? ERROR_SUCCESS : -1;
+        entity->type = L"REG_SZ";
+        entity->value = reg_data;
+      }
+
+      if (result != ERROR_SUCCESS) {
+        Sleep((i + 1) * 10);
+      }
+    }
+
+    if (result != ERROR_SUCCESS) {
+      if (result == -1){
+        SetErrorMessage("Value verification failed.");
+      } else {
+        char buffer[512];
+        size_t size;
+        const wchar_t *wbuffer = errno_to_text(result);
+        wcstombs_s(&size, buffer, 512, wbuffer, 512);
+        SetErrorMessage(buffer);
+        delete[] wbuffer;
+      }
+      return;
     }
   }
+
 
   // Executed when the async work is complete
   // this function will be run inside the main event loop
@@ -332,12 +381,6 @@ NAN_METHOD(getValue)
     return;
   }
 
-  if (!Nan::Has(object, New("type").ToLocalChecked()).FromJust()) {
-    Local<Value> argv[] = {New("type is missing").ToLocalChecked(), Null()};
-    callback->Call(2, argv);
-    return;
-  }
-
   if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
     Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
@@ -355,15 +398,6 @@ NAN_METHOD(getValue)
 
   v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
   entity->subkey = utf8_decode(*subkey);
-
-  v8::String::Utf8Value utype(Get(object, New("type").ToLocalChecked()).ToLocalChecked()->ToString());
-  std::string type(*utype);
-  if (!validate_type(type)) {
-    Local<Value> argv[] = {New("invalid type. [REG_SZ, REG_DWORD, REG_QWORD]").ToLocalChecked(), Null()};
-    callback->Call(2, argv);
-    return;
-  }
-  entity->type = utf8_decode(type);
 
   v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
   entity->key = utf8_decode(*key);

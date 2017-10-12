@@ -8,22 +8,20 @@ describe('registry', function () {
     return Registry.getValue({
       hkey: "HKEY_CURRENT_USER",
       subkey: "SOFTWARE\\Bebo\\GameCapture",
-      type: "REG_SZ",
       key: "Logs",
-    })
-      .then(function (data) {
-        console.error(data);
-        return true;
-      }).catch(function (err) {
-        console.error(err);
-        throw err;
-      });
+    }).then(function (data) {
+      console.error(data);
+      return true;
+    }).catch(function (err) {
+      console.error(err);
+      throw err;
+    });
   });
 
   it('put key', function () {
     return Registry.putValue({
       hkey: "HKEY_CURRENT_USER",
-      subkey: "SOFTWARE\\Bebo\\GameCapture",
+      subkey: "SOFTWARE\\Bebo\\TestCapture",
       type: "REG_QWORD",
       value: "9223372036854775800",
       key: "Testing12",
