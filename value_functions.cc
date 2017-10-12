@@ -184,11 +184,11 @@ class PutValueWorker : public WinAsyncWorker
 {
 protected:
   ValueEntity *entity;
-  bool createIfKeyNotExists;
+  bool replaceIfKeyExists;
 
 public:
-  PutValueWorker(ValueEntity *e, Callback *callback, bool _createIfKeyNotExists)
-      : entity(e), WinAsyncWorker(callback), createIfKeyNotExists(_createIfKeyNotExists){};
+  PutValueWorker(ValueEntity *e, Callback *callback, bool _replaceIfKeyExists)
+      : entity(e), WinAsyncWorker(callback), replaceIfKeyExists(replaceIfKeyExists){};
   ~PutValueWorker(){};
 
   void Execute()
@@ -202,8 +202,8 @@ public:
 
     const wchar_t *key = entity->key.c_str();
 
-    if (!createIfKeyNotExists && !reg_key.HasValue(key)) {
-      SetErrorMessage("Unable to find key");
+    if (!replaceIfKeyExists && reg_key.HasValue(key)) {
+      SetErrorMessage("Key already exists");
       return;
     }
 
