@@ -188,7 +188,7 @@ protected:
 
 public:
   PutValueWorker(ValueEntity *e, Callback *callback, bool _replaceIfKeyExists)
-      : entity(e), WinAsyncWorker(callback), replaceIfKeyExists(replaceIfKeyExists){};
+      : entity(e), WinAsyncWorker(callback), replaceIfKeyExists(_replaceIfKeyExists){};
   ~PutValueWorker(){};
 
   void Execute()
