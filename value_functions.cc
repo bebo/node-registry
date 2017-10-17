@@ -470,7 +470,17 @@ NAN_METHOD(putValue)
   } else if (type.compare("REG_QWORD") == 0) {
     v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
     std::string::size_type sz = 0;
-    entity->value64 = std::stoll(*value, &sz, 0);
+    try {
+      entity->value64 = std::stoll(*value, &sz, 0);
+    } catch (std::invalid_argument) {
+      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    } catch (std::out_of_range) {
+      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    }
   } else if (type.compare("REG_SZ") == 0) {
     v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
     entity->value = utf8_decode(*value);
@@ -544,7 +554,17 @@ NAN_METHOD(createValue)
   } else if (type.compare("REG_QWORD") == 0) {
     v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
     std::string::size_type sz = 0;
-    entity->value64 = std::stoll(*value, &sz, 0);
+    try {
+      entity->value64 = std::stoll(*value, &sz, 0);
+    } catch (std::invalid_argument) {
+      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    } catch (std::out_of_range) {
+      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    }
   } else if (type.compare("REG_SZ") == 0) {
     v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
     entity->value = utf8_decode(*value);

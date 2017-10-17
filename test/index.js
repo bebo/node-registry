@@ -69,4 +69,18 @@ describe('registry', function () {
       return true;
     });
   });
+
+  it('invalid argument', () => {
+    return Registry.putValue({
+      hkey: "HKEY_CURRENT_USER",
+      subkey: "SOFTWARE\\Bebo\\Test",
+      type: "REG_QWORD",
+      value: "test",
+      key: "Testing122232",
+    }).then(function (data) {
+      throw 'should not succeed';
+    }).catch(function (err) {
+      return true;
+    });
+  });
 });
