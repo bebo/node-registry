@@ -102,6 +102,32 @@ bool validate_type(std::string &type) {
   return true;
 }
 
+v8::Local<v8::Value> getValueFromObject(v8::Local<v8::Object> options, std::string key) {
+  v8::Local<v8::String> v8str = Nan::New<v8::String>(key).ToLocalChecked();
+  return Nan::Get(options, v8str).ToLocalChecked();
+}
+
+int getIntFromObject(v8::Local<v8::Object> options, std::string key) {
+  return Nan::To<v8::Int32>(getValueFromObject(options, key)).ToLocalChecked()->Value();
+}
+
+bool getBoolFromObject(v8::Local<v8::Object> options, std::string key) {
+  return Nan::To<v8::Boolean>(getValueFromObject(options, key)).ToLocalChecked()->Value();
+}
+
+v8::Local<v8::String> getStringFromObject(v8::Local<v8::Object> options, std::string key) {
+  return Nan::To<v8::String>(getValueFromObject(options, key)).ToLocalChecked();
+}
+
+double getDoubleFromObject(v8::Local<v8::Object> options, std::string key) {
+  return Nan::To<double>(getValueFromObject(options, key)).FromMaybe(0);
+}
+
+bool isKeyExists(v8::Local<v8::Object> options, std::string key) {
+  v8::Local<v8::String> v8str = Nan::New<v8::String>(key).ToLocalChecked();
+  return Nan::Has(options, v8str).FromJust();
+}
+
 class GetValueWorker : public WinAsyncWorker
 {
 protected:
@@ -369,25 +395,25 @@ NAN_METHOD(getValue)
   Callback *callback = new Callback(info[1].As<Function>());
   ValueEntity *entity = new ValueEntity;
 
-  if (!Nan::Has(object, New("hkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "hkey")) {
     Local<Value> argv[] = {New("hkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("subkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "subkey")) {
     Local<Value> argv[] = {New("subkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "key")) {
     Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  v8::String::Utf8Value hkey(Get(object, New("hkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value hkey(getStringFromObject(object, "hkey"));
   try {
   entity->hkey = hkey_from_string(*hkey);
   } catch (const char*) {
@@ -396,10 +422,10 @@ NAN_METHOD(getValue)
     return;
   }
 
-  v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value subkey(getStringFromObject(object, "subkey"));
   entity->subkey = utf8_decode(*subkey);
 
-  v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
   AsyncQueueWorker(new GetValueWorker(entity, callback));
@@ -411,37 +437,37 @@ NAN_METHOD(putValue)
   Callback *callback = new Callback(info[1].As<Function>());
   ValueEntity *entity = new ValueEntity;
 
-  if (!Nan::Has(object, New("hkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "hkey")) {
     Local<Value> argv[] = {New("hkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("subkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "subkey")) {
     Local<Value> argv[] = {New("subkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("type").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "type")) {
     Local<Value> argv[] = {New("type is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "key")) {
     Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("value").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "value")) {
     Local<Value> argv[] = {New("value is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  v8::String::Utf8Value hkey(Get(object, New("hkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value hkey(getStringFromObject(object, "hkey"));
   try {
   entity->hkey = hkey_from_string(*hkey);
   } catch (const char*) {
@@ -450,10 +476,10 @@ NAN_METHOD(putValue)
     return;
   }
 
-  v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value subkey(getStringFromObject(object, "subkey"));
   entity->subkey = utf8_decode(*subkey);
 
-  v8::String::Utf8Value utype(Get(object, New("type").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value utype(getStringFromObject(object, "type"));
   std::string type(*utype);
   if (!validate_type(type)) {
     Local<Value> argv[] = {New("invalid type. [REG_SZ, REG_DWORD, REG_QWORD]").ToLocalChecked(), Null()};
@@ -462,13 +488,18 @@ NAN_METHOD(putValue)
   }
   entity->type = utf8_decode(type);
 
-  v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
   if (type.compare("REG_DWORD") == 0) {
-    entity->value32 = Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToInt32()->Value();
+    if (!Get(object, New("value").ToLocalChecked()).ToLocalChecked()->IsInt32()) {
+      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    }
+    entity->value32 = getIntFromObject(object, "value");
   } else if (type.compare("REG_QWORD") == 0) {
-    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
     std::string::size_type sz = 0;
     try {
       entity->value64 = std::stoll(*value, &sz, 0);
@@ -482,7 +513,7 @@ NAN_METHOD(putValue)
       return;
     }
   } else if (type.compare("REG_SZ") == 0) {
-    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
     entity->value = utf8_decode(*value);
   }
 
@@ -495,49 +526,49 @@ NAN_METHOD(createValue)
   Callback *callback = new Callback(info[1].As<Function>());
   ValueEntity *entity = new ValueEntity;
 
-  if (!Nan::Has(object, New("hkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "hkey")) {
     Local<Value> argv[] = {New("hkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("subkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "subkey")) {
     Local<Value> argv[] = {New("subkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("type").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "type")) {
     Local<Value> argv[] = {New("type is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "key")) {
     Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("value").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "value")) {
     Local<Value> argv[] = {New("value is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  v8::String::Utf8Value hkey(Get(object, New("hkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value hkey(getStringFromObject(object, "hkey"));
   try {
-  entity->hkey = hkey_from_string(*hkey);
+    entity->hkey = hkey_from_string(*hkey);
   } catch (const char*) {
     Local<Value> argv[] = {New("invalid hkey. [HKLM, HKCU, HKCC, HKCR, HKU]").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value subkey(getStringFromObject(object, "subkey"));
   entity->subkey = utf8_decode(*subkey);
 
-  v8::String::Utf8Value utype(Get(object, New("type").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value utype(getStringFromObject(object, "type"));
   std::string type(*utype);
   if (!validate_type(type)) {
     Local<Value> argv[] = {New("invalid type. [REG_SZ, REG_DWORD, REG_QWORD]").ToLocalChecked(), Null()};
@@ -546,13 +577,18 @@ NAN_METHOD(createValue)
   }
   entity->type = utf8_decode(type);
 
-  v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
   if (type.compare("REG_DWORD") == 0) {
-    entity->value32 = Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToInt32()->Value();
+    if (!Get(object, New("value").ToLocalChecked()).ToLocalChecked()->IsInt32()) {
+      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
+    }
+    entity->value32 = getIntFromObject(object, "value");
   } else if (type.compare("REG_QWORD") == 0) {
-    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
     std::string::size_type sz = 0;
     try {
       entity->value64 = std::stoll(*value, &sz, 0);
@@ -566,7 +602,7 @@ NAN_METHOD(createValue)
       return;
     }
   } else if (type.compare("REG_SZ") == 0) {
-    v8::String::Utf8Value value(Get(object, New("value").ToLocalChecked()).ToLocalChecked()->ToString());
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
     entity->value = utf8_decode(*value);
   }
 
@@ -579,25 +615,25 @@ NAN_METHOD(deleteValue)
   Callback *callback = new Callback(info[1].As<Function>());
   ValueEntity *entity = new ValueEntity;
 
-  if (!Nan::Has(object, New("hkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "hkey")) {
     Local<Value> argv[] = {New("hkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("subkey").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "subkey")) {
     Local<Value> argv[] = {New("subkey is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  if (!Nan::Has(object, New("key").ToLocalChecked()).FromJust()) {
+  if (!isKeyExists(object, "key")) {
     Local<Value> argv[] = {New("key is missing").ToLocalChecked(), Null()};
     callback->Call(2, argv);
     return;
   }
 
-  v8::String::Utf8Value hkey(Get(object, New("hkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value hkey(getStringFromObject(object, "hkey"));
   try {
     entity->hkey = hkey_from_string(*hkey);
   } catch (const char*) {
@@ -606,10 +642,10 @@ NAN_METHOD(deleteValue)
     return;
   }
 
-  v8::String::Utf8Value subkey(Get(object, New("subkey").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value subkey(getStringFromObject(object, "subkey"));
   entity->subkey = utf8_decode(*subkey);
 
-  v8::String::Utf8Value key(Get(object, New("key").ToLocalChecked()).ToLocalChecked()->ToString());
+  v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
   AsyncQueueWorker(new DeleteValueWorker(entity, callback));
