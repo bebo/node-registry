@@ -111,6 +111,10 @@ int getIntFromObject(v8::Local<v8::Object> options, std::string key) {
   return Nan::To<v8::Int32>(getValueFromObject(options, key)).ToLocalChecked()->Value();
 }
 
+uint32_t getUint32FromObject(v8::Local<v8::Object> options, std::string key) {
+  return Nan::To<v8::Uint32>(getValueFromObject(options, key)).ToLocalChecked()->Value();
+}
+
 bool getBoolFromObject(v8::Local<v8::Object> options, std::string key) {
   return Nan::To<v8::Boolean>(getValueFromObject(options, key)).ToLocalChecked()->Value();
 }
@@ -196,7 +200,7 @@ public:
     Set(obj, New("type").ToLocalChecked(), New(type).ToLocalChecked());
 
     if (type.compare("REG_DWORD") == 0) {
-      Set(obj, New("value").ToLocalChecked(), New(entity->value32));
+      Set(obj, New("value").ToLocalChecked(), New((uint32_t)entity->value32));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
       oss << entity->value64;
@@ -243,7 +247,7 @@ public:
     LONG result = -1;
     for (int i = 0; i < MAX_RETRY && result != ERROR_SUCCESS; i++) {
       if (entity->type.compare(L"REG_DWORD") == 0) {
-        result = reg_key.WriteValue(key, static_cast<DWORD>(entity->value32));
+        result = reg_key.WriteValue(key, entity->value32);
       } else if (entity->type.compare(L"REG_QWORD") == 0) {
         result = reg_key.WriteValue(key, entity->value64);
       } else if (entity->type.compare(L"REG_SZ") == 0) {
@@ -320,7 +324,7 @@ public:
     Set(obj, New("type").ToLocalChecked(), New(type).ToLocalChecked());
 
     if (type.compare("REG_DWORD") == 0) {
-      Set(obj, New("value").ToLocalChecked(), New(entity->value32));
+      Set(obj, New("value").ToLocalChecked(), New((uint32_t)entity->value32));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
       oss << entity->value64;
@@ -492,12 +496,19 @@ NAN_METHOD(putValue)
   entity->key = utf8_decode(*key);
 
   if (type.compare("REG_DWORD") == 0) {
-    if (!Get(object, New("value").ToLocalChecked()).ToLocalChecked()->IsInt32()) {
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
+    std::string::size_type sz = 0;
+    try {
+      entity->value32 = std::stoul(*value, &sz, 0);
+    } catch (std::invalid_argument) {
       Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
+    } catch (std::out_of_range) {
+      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
     }
-    entity->value32 = getIntFromObject(object, "value");
   } else if (type.compare("REG_QWORD") == 0) {
     v8::String::Utf8Value value(getStringFromObject(object, "value"));
     std::string::size_type sz = 0;
@@ -580,14 +591,22 @@ NAN_METHOD(createValue)
   v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
+  // validation
   if (type.compare("REG_DWORD") == 0) {
-    if (!Get(object, New("value").ToLocalChecked()).ToLocalChecked()->IsInt32()) {
+    v8::String::Utf8Value value(getStringFromObject(object, "value"));
+    std::string::size_type sz = 0;
+    try {
+      entity->value32 = std::stoul(*value, &sz, 0);
+    } catch (std::invalid_argument) {
       Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
+    } catch (std::out_of_range) {
+      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+      callback->Call(2, argv);
+      return;
     }
-    entity->value32 = getIntFromObject(object, "value");
-  } else if (type.compare("REG_QWORD") == 0) {
+   } else if (type.compare("REG_QWORD") == 0) {
     v8::String::Utf8Value value(getStringFromObject(object, "value"));
     std::string::size_type sz = 0;
     try {

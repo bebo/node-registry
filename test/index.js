@@ -19,10 +19,10 @@ describe('registry', function () {
   it('put key', function () {
     return Registry.putValue({
       hkey: "HKEY_CURRENT_USER",
-      subkey: "SOFTWARE\\Bebo\\TestCapture",
+      subkey: "SOFTWARE\\Bebo\\Test",
       type: "REG_QWORD",
       value: "9223372036854775800",
-      key: "Testing12",
+      key: "TestPutKey",
     }).then(function (data) {
       return true;
     }).catch(function (err) {
@@ -33,15 +33,15 @@ describe('registry', function () {
   it('delete key', function () {
     return Registry.putValue({
       hkey: "HKEY_CURRENT_USER",
-      subkey: "SOFTWARE\\Bebo\\GameCapture",
+      subkey: "SOFTWARE\\Bebo\\Test",
       type: "REG_SZ",
       value: "test",
-      key: "Testing122232",
+      key: "TestDeleteKey",
     }).then(function (data) {
       return Registry.deleteValue({
         hkey: "HKEY_CURRENT_USER",
-        subkey: "SOFTWARE\\Bebo\\GameCapture",
-        key: "Testing122232",
+        subkey: "SOFTWARE\\Bebo\\Test",
+        key: "TestDeleteKey",
       })
     }).then(function (data) {
       return true;
@@ -50,20 +50,20 @@ describe('registry', function () {
     });
   });
 
-  it('create key', function () {
+  it('create key - not create if exists', function () {
     return Registry.putValue({ // force to write
       hkey: "HKEY_CURRENT_USER",
-      subkey: "SOFTWARE\\Bebo\\GameCapture",
+      subkey: "SOFTWARE\\Bebo\\Test",
       type: "REG_SZ",
       key: "TestCreateKey",
-      value: "test",
+      value: "test - create (put)",
     }).then(function (data) {
       return Registry.createValue({
         hkey: "HKEY_CURRENT_USER",
-        subkey: "SOFTWARE\\Bebo\\GameCapture",
+        subkey: "SOFTWARE\\Bebo\\Test",
         type: "REG_SZ",
         key: "TestCreateKey",
-        value: "test - fail",
+        value: "test - create (create) should not happen",
       })
     }).then((data) => {
       throw 'should not succeed';
@@ -88,19 +88,74 @@ describe('registry', function () {
     });
   });
 
-  it('invalid argument dword', () => {
+  it('unsigned - dword', () => {
+    const hkey = "HKEY_CURRENT_USER";
+    const subkey = "SOFTWARE\\Bebo\\Test";
+    const key = "Test_DWORD_unsigned_1";
+
+    return Registry.putValue({
+      hkey,
+      subkey,
+      key,
+      type: "REG_DWORD",
+      value: "4294967295"
+    }).then(function (data) {
+      return Registry.getValue({
+        hkey,
+        subkey,
+        key
+      });
+    }).then(function (data) {
+      if (data.value != 0xffffffff) {
+        throw "data.value != 0xffffffff";
+      }
+      return true;
+    }).catch(function (err) {
+      throw err;
+    });
+  });
+
+  it('unsigned - dword', () => {
+    const hkey = "HKEY_CURRENT_USER";
+    const subkey = "SOFTWARE\\Bebo\\Test";
+    const key = "Test_DWORD_unsigned_2";
+    return Registry.putValue({
+      hkey,
+      subkey,
+      key,
+      type: 'REG_DWORD',
+      value: "-1"
+    }).then(function (data) {
+      return Registry.getValue({
+        hkey,
+        subkey,
+        key
+      });
+    }).then(function (data) {
+      if (data.value != 0xffffffff) {
+        throw "data.value != 0xffffffff";
+      }
+      return true;
+    }).catch(function (err) {
+      throw err;
+    });
+  });
+
+
+  it('invalid argument qword', () => {
     return Registry.putValue({
       hkey: "HKEY_CURRENT_USER",
       subkey: "SOFTWARE\\Bebo\\Test",
-      type: "REG_DWORD",
+      type: "REG_QWORD",
+      key: "Test_QWORD_invalid",
       value: "test",
-      key: "TestingDWORD",
     }).then(function (data) {
       throw 'should not succeed';
     }).catch(function (err) {
       if (err != 'value - invalid argument') throw err;
-      console.error(err);
       return true;
     });
   });
+
+
 });

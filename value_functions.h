@@ -20,6 +20,6 @@ class ValueEntity {
     std::wstring key;
 
     std::wstring value;
-    int32_t value32;
+    DWORD value32;
     int64_t value64;
 };
