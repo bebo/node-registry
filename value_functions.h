@@ -9,7 +9,7 @@ NAN_METHOD(createValue);
 NAN_METHOD(deleteValue);
 
 class ValueEntity {
-  public: 
+  public:
     ValueEntity() : hkey(NULL){};
     ~ValueEntity() {
     };
@@ -20,6 +20,8 @@ class ValueEntity {
     std::wstring key;
 
     std::wstring value;
+    BYTE* valuebytes;
+    DWORD size;
     DWORD value32;
     int64_t value64;
 };

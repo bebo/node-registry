@@ -157,10 +157,9 @@ public:
       return;
     }
 
-    BYTE data[1024];
-    DWORD size = 1024;
     DWORD type;
-    LONG result = reg_key.ReadValue(key, data, &size, &type);
+    BYTE data[4096];
+    LONG result = reg_key.ReadValue(key, data, &entity->size, &type);
 
     if (type == REG_DWORD) {
       entity->type = L"REG_DWORD";
@@ -174,7 +173,8 @@ public:
     } else if (type == REG_EXPAND_SZ) {
       // UNSUPPORTED FOR NOW
     } else if (type == REG_BINARY) {
-      // UNSUPPORTED FOR NOW
+      entity->type = L"REG_BINARY";
+      entity->valuebytes = reinterpret_cast<BYTE*>(data);
     }
   }
 
@@ -208,8 +208,10 @@ public:
     } else if (type.compare("REG_SZ") == 0) {
       std::string value = utf8_encode(entity->value);
       Set(obj, New("value").ToLocalChecked(), New(value).ToLocalChecked());
+    } else if (type.compare("REG_BINARY") == 0) {
+      Set(obj, New("value").ToLocalChecked(),
+          Nan::NewBuffer(reinterpret_cast<char*>(entity->valuebytes), entity->size).ToLocalChecked());
     }
-
 
     Local<Value> argv[] = {Null(), obj};
 

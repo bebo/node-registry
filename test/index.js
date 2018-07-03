@@ -16,6 +16,22 @@ describe('registry', function () {
     });
   });
 
+  it('get key binary', function () {
+    return Registry.getValue({
+      hkey: "HKEY_CURRENT_USER",
+      subkey: "SOFTWARE\\Elgato Systems GmbH\\StreamDeck",
+      key: "Devices",
+    }).then(function (data) {
+      if (!(data.value instanceof Buffer)) {
+        throw "Value is not buffer type";
+      }
+      return true;
+    }).catch(function (err) {
+      throw err;
+    });
+  });
+
+
   it('put key', function () {
     return Registry.putValue({
       hkey: "HKEY_CURRENT_USER",
