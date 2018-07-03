@@ -12,12 +12,12 @@
   "devDependencies": {
     "bindings": "^1.2.1",
     "mocha": "^3.4.2",
-    "nan": "^2.6.2",
+    "nan": "^2.10.0",
     "napa": "^3.0.0",
-    "node-gyp": "^3.6.2"
+    "node-gyp": "^3.7.0"
   },
   "dependencies": {
-    "bluebird": "^3.5.0"
+    "bluebird": "^3.5.1"
   },
   "directories": {
     "test": "test"
