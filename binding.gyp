@@ -2,7 +2,7 @@
   "targets": [
     {
       "target_name": "node-registry",
-      "sources": [ "node_registry.cc", "registry.cc", "value_functions.cc", "win_async_worker.cc"],
+      "sources": [ "node_registry.cc", "registry.cc", "value_functions.cc"],
       "include_dirs": [ "<!(node -e \"require('nan')\")" ],
       "defines": [
         "UNICODE",

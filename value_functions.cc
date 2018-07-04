@@ -1,8 +1,7 @@
 #include "value_functions.h"
-#include "win_async_worker.h"
 #include "registry.h"
 
-#include <algorithm> 
+#include <algorithm>
 #include <iostream>
 #include <functional>
 #include <cctype>
@@ -19,16 +18,12 @@
 using Nan::AsyncQueueWorker;
 using Nan::AsyncWorker;
 using Nan::Callback;
-using Nan::Callback;
 using v8::Function;
 using v8::Local;
 using v8::Number;
 using v8::Object;
 using v8::Value;
 using v8::Array;
-using Nan::AsyncQueueWorker;
-using Nan::AsyncWorker;
-using Nan::Callback;
 using Nan::HandleScope;
 using Nan::New;
 using Nan::Get;
@@ -44,10 +39,24 @@ using Nan::To;
 #define REG_QWORD_W L"REG_QWORD"
 #define MAX_RETRY   3
 
-std::wstring utf8_decode(const std::string& str) {
-  if (str.empty())
-    return std::wstring();
+const wchar_t *errno_to_text(HRESULT errorNumber)
+{
+  const wchar_t *errorMessage;
+  DWORD nLen = FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_MAX_WIDTH_MASK,
+      NULL,
+      errorNumber,
+      MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+      (LPTSTR)&errorMessage,
+      0,
+      NULL);
+  if (nLen == 0) return L"Unknown Error. ";
+  return errorMessage;
+}
 
+std::wstring utf8_decode(const std::string& str) {
+  if (str.empty()) {
+    return std::wstring();
+  }
   int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
   std::wstring wstrTo( size_needed, 0 );
   MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
@@ -56,8 +65,9 @@ std::wstring utf8_decode(const std::string& str) {
 
 std::string utf8_encode(const std::wstring &wstr)
 {
-  if (wstr.empty())
+  if (wstr.empty()) {
     return std::string();
+  }
   int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
   std::string strTo(size_needed, 0);
   WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &strTo[0], size_needed, NULL, NULL);
@@ -90,14 +100,11 @@ HKEY hkey_from_string(std::string hkey) {
 
 bool validate_type(std::string &type) {
   const char *type_c = type.c_str();
-
-  if (_stricmp(type_c, REG_SZ_A) != 0 && 
+  if (_stricmp(type_c, REG_SZ_A) != 0 &&
       _stricmp(type_c, REG_DWORD_A) != 0 &&
-      _stricmp(type_c, REG_QWORD_A) != 0
-      ) {
+      _stricmp(type_c, REG_QWORD_A) != 0) {
     return false;
   }
-
   transform(type.begin(), type.end(), type.begin(), std::toupper);
   return true;
 }
@@ -132,49 +139,77 @@ bool isKeyExists(v8::Local<v8::Object> options, std::string key) {
   return Nan::Has(options, v8str).FromJust();
 }
 
-class GetValueWorker : public WinAsyncWorker
+bool ValidateAndConvertValueToUint32(const std::string& value, uint32_t* out, std::string* err_message) {
+  try {
+    *out = std::stoul(value, NULL, 0);
+    *err_message = "";
+    return true;
+  } catch (std::invalid_argument) {
+    *err_message = "value - invalid argument";
+    return false;
+  } catch (std::out_of_range) {
+    *err_message = "value - out of range";
+    return false;
+  }
+}
+
+bool ValidateAndConvertValueToUint64(const std::string& value, uint64_t* out, std::string* err_message) {
+  try {
+    *out = std::stoull(value, NULL, 0);
+    *err_message = "";
+    return true;
+  } catch (std::invalid_argument) {
+    *err_message = "value - invalid argument";
+    return false;
+  } catch (std::out_of_range) {
+    *err_message = "value - out of range";
+    return false;
+  }
+}
+
+class GetValueWorker : public AsyncWorker
 {
 protected:
   ValueEntity *entity;
 
 public:
   GetValueWorker(ValueEntity *e, Callback *callback)
-      : entity(e), WinAsyncWorker(callback){};
-  ~GetValueWorker(){};
+    : AsyncWorker(callback), entity(e) {};
+
+  ~GetValueWorker() {
+    if (entity->value) {
+      free(entity->value);
+    }
+    delete entity;
+  };
 
   void Execute()
   {
-    const wchar_t *subkey = entity->subkey.c_str();
+    const wchar_t* subkey = entity->subkey.c_str();
     RegKey reg_key(entity->hkey, subkey, KEY_READ);
     if (!reg_key.Valid()) {
       SetErrorMessage("Failed to open registry");
       return;
     }
 
-    const wchar_t *key = entity->key.c_str();
+    const wchar_t* key = entity->key.c_str();
     if (!reg_key.HasValue(key)) {
       SetErrorMessage("Unable to find key");
       return;
     }
 
     DWORD type;
-    BYTE data[4096];
-    LONG result = reg_key.ReadValue(key, data, &entity->size, &type);
-
+    LONG result = reg_key.ReadValueAlloc(key, &entity->value, &entity->size, &type);
     if (type == REG_DWORD) {
       entity->type = L"REG_DWORD";
-      entity->value32 = *reinterpret_cast<DWORD*>(data);
     } else if (type == REG_QWORD) {
       entity->type = L"REG_QWORD";
-      entity->value64 = *reinterpret_cast<int64_t*>(data);
     } else if (type == REG_SZ) {
       entity->type = L"REG_SZ";
-      entity->value = reinterpret_cast<wchar_t*>(data);
-    } else if (type == REG_EXPAND_SZ) {
-      // UNSUPPORTED FOR NOW
     } else if (type == REG_BINARY) {
       entity->type = L"REG_BINARY";
-      entity->valuebytes = reinterpret_cast<BYTE*>(data);
+    } else if (type == REG_EXPAND_SZ) {
+      entity->type = L"REG_EXPAND_SZ";
     }
   }
 
@@ -200,17 +235,17 @@ public:
     Set(obj, New("type").ToLocalChecked(), New(type).ToLocalChecked());
 
     if (type.compare("REG_DWORD") == 0) {
-      Set(obj, New("value").ToLocalChecked(), New((uint32_t)entity->value32));
+      Set(obj, New("value").ToLocalChecked(), New(*reinterpret_cast<uint32_t*>(entity->value)));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
-      oss << entity->value64;
+      oss << *reinterpret_cast<uint64_t*>(entity->value);
       Set(obj, New("value").ToLocalChecked(), New(oss.str()).ToLocalChecked());
     } else if (type.compare("REG_SZ") == 0) {
-      std::string value = utf8_encode(entity->value);
+      std::string value = utf8_encode(reinterpret_cast<wchar_t*>(entity->value));
       Set(obj, New("value").ToLocalChecked(), New(value).ToLocalChecked());
     } else if (type.compare("REG_BINARY") == 0) {
       Set(obj, New("value").ToLocalChecked(),
-          Nan::NewBuffer(reinterpret_cast<char*>(entity->valuebytes), entity->size).ToLocalChecked());
+          Nan::NewBuffer(reinterpret_cast<char*>(entity->value), entity->size).ToLocalChecked());
     }
 
     Local<Value> argv[] = {Null(), obj};
@@ -219,7 +254,7 @@ public:
   }
 };
 
-class PutValueWorker : public WinAsyncWorker
+class PutValueWorker : public AsyncWorker
 {
 protected:
   ValueEntity *entity;
@@ -227,8 +262,14 @@ protected:
 
 public:
   PutValueWorker(ValueEntity *e, Callback *callback, bool _replaceIfKeyExists)
-      : entity(e), WinAsyncWorker(callback), replaceIfKeyExists(_replaceIfKeyExists){};
-  ~PutValueWorker(){};
+      : entity(e), AsyncWorker(callback), replaceIfKeyExists(_replaceIfKeyExists){};
+
+  ~PutValueWorker() {
+    if (entity->value) {
+      free(entity->value);
+    }
+    delete entity;
+  };
 
   void Execute()
   {
@@ -246,14 +287,15 @@ public:
       return;
     }
 
+
     LONG result = -1;
     for (int i = 0; i < MAX_RETRY && result != ERROR_SUCCESS; i++) {
       if (entity->type.compare(L"REG_DWORD") == 0) {
-        result = reg_key.WriteValue(key, entity->value32);
+        result = reg_key.WriteValue(key, *reinterpret_cast<DWORD*>(entity->value));
       } else if (entity->type.compare(L"REG_QWORD") == 0) {
-        result = reg_key.WriteValue(key, entity->value64);
+        result = reg_key.WriteValue(key, *reinterpret_cast<uint64_t*>(entity->value));
       } else if (entity->type.compare(L"REG_SZ") == 0) {
-        result = reg_key.WriteValue(key, entity->value.c_str());
+        result = reg_key.WriteValue(key, reinterpret_cast<wchar_t*>(entity->value));
       }
 
       if (result != ERROR_SUCCESS) {
@@ -261,27 +303,24 @@ public:
         continue;
       }
 
-      BYTE data[1024];
-      DWORD size = 1024;
       DWORD type;
-      result = reg_key.ReadValue(key, data, &size, &type);
-
+      void* read_data;
+      DWORD read_length;
+      LONG result = reg_key.ReadValueAlloc(key, &read_data, &read_length, &type);
       if (type == REG_DWORD) {
-        DWORD reg_data = *reinterpret_cast<DWORD*>(data);
-        result = (entity->value32 == reg_data) ? ERROR_SUCCESS : -1;
-        entity->type = L"REG_DWORD";
-        entity->value32 = reg_data;
+        DWORD reg_data = *reinterpret_cast<DWORD*>(read_data);
+        DWORD input_data = *reinterpret_cast<DWORD*>(entity->value);
+        result = (input_data == reg_data) ? ERROR_SUCCESS : -1;
       } else if (type == REG_QWORD) {
-        int64_t reg_data = *reinterpret_cast<int64_t*>(data);
-        result = (entity->value64 == reg_data) ? ERROR_SUCCESS : -1;
-        entity->type = L"REG_QWORD";
-        entity->value64 = reg_data;
+        uint64_t reg_data = *reinterpret_cast<uint64_t*>(read_data);
+        uint64_t input_data = *reinterpret_cast<uint64_t*>(entity->value);
+        result = (input_data == reg_data) ? ERROR_SUCCESS : -1;
       } else if (type == REG_SZ) {
-        wchar_t *reg_data = reinterpret_cast<wchar_t*>(data);
-        result = (entity->value.compare(reg_data) == 0) ? ERROR_SUCCESS : -1;
-        entity->type = L"REG_SZ";
-        entity->value = reg_data;
+        wchar_t* reg_data = reinterpret_cast<wchar_t*>(read_data);
+        wchar_t* input_data = reinterpret_cast<wchar_t*>(entity->value);
+        result = (wcscmp(reg_data, input_data) == 0) ? ERROR_SUCCESS : -1;
       }
+      free(read_data);
 
       if (result != ERROR_SUCCESS) {
         Sleep((i + 1) * 10);
@@ -289,7 +328,7 @@ public:
     }
 
     if (result != ERROR_SUCCESS) {
-      if (result == -1){
+      if (result == -1) {
         SetErrorMessage("Value verification failed.");
       } else {
         char buffer[512];
@@ -326,13 +365,14 @@ public:
     Set(obj, New("type").ToLocalChecked(), New(type).ToLocalChecked());
 
     if (type.compare("REG_DWORD") == 0) {
-      Set(obj, New("value").ToLocalChecked(), New((uint32_t)entity->value32));
+      Set(obj, New("value").ToLocalChecked(),
+          New(*reinterpret_cast<uint32_t*>(entity->value)));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
-      oss << entity->value64;
+      oss << *reinterpret_cast<uint64_t*>(entity->value);
       Set(obj, New("value").ToLocalChecked(), New(oss.str()).ToLocalChecked());
     } else if (type.compare("REG_SZ") == 0) {
-      std::string value = utf8_encode(entity->value);
+      std::string value = utf8_encode(reinterpret_cast<wchar_t*>(entity->value));
       Set(obj, New("value").ToLocalChecked(), New(value).ToLocalChecked());
     }
 
@@ -342,15 +382,20 @@ public:
   }
 };
 
-class DeleteValueWorker : public WinAsyncWorker
+class DeleteValueWorker : public AsyncWorker
 {
 protected:
   ValueEntity *entity;
 
 public:
   DeleteValueWorker(ValueEntity *e, Callback *callback)
-      : entity(e), WinAsyncWorker(callback){};
-  ~DeleteValueWorker(){};
+      : entity(e), AsyncWorker(callback){};
+  ~DeleteValueWorker() {
+    if (entity->value) {
+      free(entity->value);
+    }
+    delete entity;
+  };
 
   void Execute()
   {
@@ -497,37 +542,24 @@ NAN_METHOD(putValue)
   v8::String::Utf8Value key(getStringFromObject(object, "key"));
   entity->key = utf8_decode(*key);
 
+  std::string error_message;
+  v8::String::Utf8Value value(getStringFromObject(object, "value"));
   if (type.compare("REG_DWORD") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    std::string::size_type sz = 0;
-    try {
-      entity->value32 = std::stoul(*value, &sz, 0);
-    } catch (std::invalid_argument) {
-      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
-      callback->Call(2, argv);
-      return;
-    } catch (std::out_of_range) {
-      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+    entity->value = malloc(sizeof(uint32_t));
+    if (!ValidateAndConvertValueToUint32(*value, (uint32_t*)entity->value, &error_message)) {
+      Local<Value> argv[] = {New(error_message).ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
     }
-  } else if (type.compare("REG_QWORD") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    std::string::size_type sz = 0;
-    try {
-      entity->value64 = std::stoll(*value, &sz, 0);
-    } catch (std::invalid_argument) {
-      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
-      callback->Call(2, argv);
-      return;
-    } catch (std::out_of_range) {
-      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+   } else if (type.compare("REG_QWORD") == 0) {
+    entity->value = malloc(sizeof(uint64_t));
+    if (!ValidateAndConvertValueToUint64(*value, (uint64_t*)entity->value, &error_message)) {
+      Local<Value> argv[] = {New(error_message).ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
     }
   } else if (type.compare("REG_SZ") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    entity->value = utf8_decode(*value);
+    entity->value = _wcsdup(utf8_decode(*value).c_str());
   }
 
   AsyncQueueWorker(new PutValueWorker(entity, callback, true));
@@ -594,37 +626,24 @@ NAN_METHOD(createValue)
   entity->key = utf8_decode(*key);
 
   // validation
+  std::string error_message;
+  v8::String::Utf8Value value(getStringFromObject(object, "value"));
   if (type.compare("REG_DWORD") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    std::string::size_type sz = 0;
-    try {
-      entity->value32 = std::stoul(*value, &sz, 0);
-    } catch (std::invalid_argument) {
-      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
-      callback->Call(2, argv);
-      return;
-    } catch (std::out_of_range) {
-      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+    entity->value = malloc(sizeof(uint32_t));
+    if (!ValidateAndConvertValueToUint32(*value, (uint32_t*)entity->value, &error_message)) {
+      Local<Value> argv[] = {New(error_message).ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
     }
    } else if (type.compare("REG_QWORD") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    std::string::size_type sz = 0;
-    try {
-      entity->value64 = std::stoll(*value, &sz, 0);
-    } catch (std::invalid_argument) {
-      Local<Value> argv[] = {New("value - invalid argument").ToLocalChecked(), Null()};
-      callback->Call(2, argv);
-      return;
-    } catch (std::out_of_range) {
-      Local<Value> argv[] = {New("value - out of range").ToLocalChecked(), Null()};
+    entity->value = malloc(sizeof(uint64_t));
+    if (!ValidateAndConvertValueToUint64(*value, (uint64_t*)entity->value, &error_message)) {
+      Local<Value> argv[] = {New(error_message).ToLocalChecked(), Null()};
       callback->Call(2, argv);
       return;
     }
   } else if (type.compare("REG_SZ") == 0) {
-    v8::String::Utf8Value value(getStringFromObject(object, "value"));
-    entity->value = utf8_decode(*value);
+    entity->value = _wcsdup(utf8_decode(*value).c_str());
   }
 
   AsyncQueueWorker(new PutValueWorker(entity, callback, false));

@@ -136,13 +136,18 @@ class RegKey {
                  DWORD* dsize,
                  DWORD* dtype) const;
 
+  LONG ReadValueAlloc(const wchar_t* name,
+                 void** data,
+                 DWORD* dsize,
+                 DWORD* dtype) const;
+
   // Setters:
 
   // Sets an int32_t value.
   LONG WriteValue(const wchar_t* name, DWORD in_value);
 
   // Sets an int64_t value.
-  LONG RegKey::WriteValue(const wchar_t* name, int64_t in_value);
+  LONG RegKey::WriteValue(const wchar_t* name, uint64_t in_value);
 
   // Sets a string value.
   LONG WriteValue(const wchar_t* name, const wchar_t* in_value);

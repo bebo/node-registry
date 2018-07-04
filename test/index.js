@@ -123,7 +123,7 @@ describe('registry', function () {
       });
     }).then(function (data) {
       if (data.value != 0xffffffff) {
-        throw "data.value != 0xffffffff";
+        throw data.value + " : data.value != 0xffffffff";
       }
       return true;
     }).catch(function (err) {
@@ -156,7 +156,6 @@ describe('registry', function () {
       throw err;
     });
   });
-
 
   it('invalid argument qword', () => {
     return Registry.putValue({

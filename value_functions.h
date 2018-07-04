@@ -10,18 +10,14 @@ NAN_METHOD(deleteValue);
 
 class ValueEntity {
   public:
-    ValueEntity() : hkey(NULL){};
-    ~ValueEntity() {
-    };
+    ValueEntity() : hkey(NULL), value(NULL), size(0) {};
+    ~ValueEntity() {};
 
     HKEY hkey;
     std::wstring subkey;
     std::wstring type;
     std::wstring key;
 
-    std::wstring value;
-    BYTE* valuebytes;
+    void* value;
     DWORD size;
-    DWORD value32;
-    int64_t value64;
 };

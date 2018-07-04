@@ -33,6 +33,9 @@
 #include <algorithm>
 #include <string.h>
 
+#define DEFAULT_READ_BUFFER_SIZE             2048
+#define DEFAULT_READ_BUFFER_SIZE_INCREMENTOR 1024
+
 // The arraysize(arr) macro returns the # of elements in an array arr.  The
 // expression is a compile-time constant, and therefore can be used in defining
 // new arrays, for example.  If you use arraysize on a pointer by mistake, you
@@ -303,6 +306,31 @@ LONG RegKey::ReadValue(const wchar_t* name,
   return result;
 }
 
+LONG RegKey::ReadValueAlloc(const wchar_t* name,
+                       void** out_data,
+                       DWORD* dsize,
+                       DWORD* dtype) const {
+  DWORD type;
+  int64_t buffer_size = DEFAULT_READ_BUFFER_SIZE;
+  DWORD read_size = buffer_size;
+
+  void* data = malloc(buffer_size);
+
+  LONG result = ReadValue(name, data, &read_size, &type);
+  while (result == ERROR_MORE_DATA) {
+    buffer_size += DEFAULT_READ_BUFFER_SIZE_INCREMENTOR;
+    data = realloc(data, buffer_size);
+    read_size = buffer_size;
+    result = ReadValue(name, data, &read_size, &type);
+  }
+
+  *out_data = data;
+  *dsize = read_size;
+  *dtype = type;
+  return result;
+}
+
+
 LONG RegKey::ReadValues(const wchar_t* name,
                         std::vector<std::wstring>* values) {
   values->clear();
@@ -339,11 +367,10 @@ LONG RegKey::WriteValue(const wchar_t* name, DWORD in_value) {
       name, &in_value, static_cast<DWORD>(sizeof(in_value)), REG_DWORD);
 }
 
-LONG RegKey::WriteValue(const wchar_t* name, int64_t in_value) {
+LONG RegKey::WriteValue(const wchar_t* name, uint64_t in_value) {
   return WriteValue(
-      name, &in_value, static_cast<int64_t>(sizeof(in_value)), REG_QWORD);
+      name, &in_value, static_cast<uint64_t>(sizeof(in_value)), REG_QWORD);
 }
-
 
 LONG RegKey::WriteValue(const wchar_t * name, const wchar_t* in_value) {
   return WriteValue(name, in_value,
