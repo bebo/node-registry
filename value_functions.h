@@ -11,7 +11,11 @@ NAN_METHOD(deleteValue);
 class ValueEntity {
   public:
     ValueEntity() : hkey(NULL), value(NULL), size(0) {};
-    ~ValueEntity() {};
+    ~ValueEntity() {
+      if (value) {
+        free(value);
+      }
+    };
 
     HKEY hkey;
     std::wstring subkey;

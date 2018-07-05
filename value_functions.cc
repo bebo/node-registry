@@ -177,9 +177,6 @@ public:
     : AsyncWorker(callback), entity(e) {};
 
   ~GetValueWorker() {
-    if (entity->value) {
-      free(entity->value);
-    }
     delete entity;
   };
 
@@ -235,17 +232,17 @@ public:
     Set(obj, New("type").ToLocalChecked(), New(type).ToLocalChecked());
 
     if (type.compare("REG_DWORD") == 0) {
-      Set(obj, New("value").ToLocalChecked(), New(*reinterpret_cast<uint32_t*>(entity->value)));
+      Set(obj, New("value").ToLocalChecked(), New(*static_cast<uint32_t*>(entity->value)));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
-      oss << *reinterpret_cast<uint64_t*>(entity->value);
+      oss << *static_cast<uint64_t*>(entity->value);
       Set(obj, New("value").ToLocalChecked(), New(oss.str()).ToLocalChecked());
     } else if (type.compare("REG_SZ") == 0) {
-      std::string value = utf8_encode(reinterpret_cast<wchar_t*>(entity->value));
+      std::string value = utf8_encode(static_cast<wchar_t*>(entity->value));
       Set(obj, New("value").ToLocalChecked(), New(value).ToLocalChecked());
     } else if (type.compare("REG_BINARY") == 0) {
       Set(obj, New("value").ToLocalChecked(),
-          Nan::NewBuffer(reinterpret_cast<char*>(entity->value), entity->size).ToLocalChecked());
+          Nan::CopyBuffer(static_cast<char*>(entity->value), entity->size).ToLocalChecked());
     }
 
     Local<Value> argv[] = {Null(), obj};
@@ -265,9 +262,6 @@ public:
       : entity(e), AsyncWorker(callback), replaceIfKeyExists(_replaceIfKeyExists){};
 
   ~PutValueWorker() {
-    if (entity->value) {
-      free(entity->value);
-    }
     delete entity;
   };
 
@@ -291,11 +285,11 @@ public:
     LONG result = -1;
     for (int i = 0; i < MAX_RETRY && result != ERROR_SUCCESS; i++) {
       if (entity->type.compare(L"REG_DWORD") == 0) {
-        result = reg_key.WriteValue(key, *reinterpret_cast<DWORD*>(entity->value));
+        result = reg_key.WriteValue(key, *static_cast<DWORD*>(entity->value));
       } else if (entity->type.compare(L"REG_QWORD") == 0) {
-        result = reg_key.WriteValue(key, *reinterpret_cast<uint64_t*>(entity->value));
+        result = reg_key.WriteValue(key, *static_cast<uint64_t*>(entity->value));
       } else if (entity->type.compare(L"REG_SZ") == 0) {
-        result = reg_key.WriteValue(key, reinterpret_cast<wchar_t*>(entity->value));
+        result = reg_key.WriteValue(key, static_cast<wchar_t*>(entity->value));
       }
 
       if (result != ERROR_SUCCESS) {
@@ -308,16 +302,16 @@ public:
       DWORD read_length;
       LONG result = reg_key.ReadValueAlloc(key, &read_data, &read_length, &type);
       if (type == REG_DWORD) {
-        DWORD reg_data = *reinterpret_cast<DWORD*>(read_data);
-        DWORD input_data = *reinterpret_cast<DWORD*>(entity->value);
+        DWORD reg_data = *static_cast<DWORD*>(read_data);
+        DWORD input_data = *static_cast<DWORD*>(entity->value);
         result = (input_data == reg_data) ? ERROR_SUCCESS : -1;
       } else if (type == REG_QWORD) {
-        uint64_t reg_data = *reinterpret_cast<uint64_t*>(read_data);
-        uint64_t input_data = *reinterpret_cast<uint64_t*>(entity->value);
+        uint64_t reg_data = *static_cast<uint64_t*>(read_data);
+        uint64_t input_data = *static_cast<uint64_t*>(entity->value);
         result = (input_data == reg_data) ? ERROR_SUCCESS : -1;
       } else if (type == REG_SZ) {
-        wchar_t* reg_data = reinterpret_cast<wchar_t*>(read_data);
-        wchar_t* input_data = reinterpret_cast<wchar_t*>(entity->value);
+        wchar_t* reg_data = static_cast<wchar_t*>(read_data);
+        wchar_t* input_data = static_cast<wchar_t*>(entity->value);
         result = (wcscmp(reg_data, input_data) == 0) ? ERROR_SUCCESS : -1;
       }
       free(read_data);
@@ -366,13 +360,13 @@ public:
 
     if (type.compare("REG_DWORD") == 0) {
       Set(obj, New("value").ToLocalChecked(),
-          New(*reinterpret_cast<uint32_t*>(entity->value)));
+          New(*static_cast<uint32_t*>(entity->value)));
     } else if (type.compare("REG_QWORD") == 0) {
       std::ostringstream oss;
-      oss << *reinterpret_cast<uint64_t*>(entity->value);
+      oss << *static_cast<uint64_t*>(entity->value);
       Set(obj, New("value").ToLocalChecked(), New(oss.str()).ToLocalChecked());
     } else if (type.compare("REG_SZ") == 0) {
-      std::string value = utf8_encode(reinterpret_cast<wchar_t*>(entity->value));
+      std::string value = utf8_encode(static_cast<wchar_t*>(entity->value));
       Set(obj, New("value").ToLocalChecked(), New(value).ToLocalChecked());
     }
 
@@ -391,9 +385,6 @@ public:
   DeleteValueWorker(ValueEntity *e, Callback *callback)
       : entity(e), AsyncWorker(callback){};
   ~DeleteValueWorker() {
-    if (entity->value) {
-      free(entity->value);
-    }
     delete entity;
   };
 
